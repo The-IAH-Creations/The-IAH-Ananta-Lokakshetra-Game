@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The IAH: Ananta Lokakshetra - Ancient Sci-Fi Exploration & Action Strategy</title>
+    <meta name="description" content="Experience The IAH: Ananta Lokakshetra - A story-driven ancient Sanskrit inspired first-person 3D strategy and action exploration game powered by adaptive AI logic.">
+    <!-- Tailwind CSS CDN for HUD UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #03060d;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #ffffff;
+        }
+
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(245, 197, 24, 0.85);
+            box-shadow: 0 0 8px rgba(245, 197, 24, 0.9);
+        }
+
+        #crosshair::before {
+            top: 9px; left: 0; width: 20px; height: 2px;
+        }
+
+        #crosshair::after {
+            top: 0; left: 9px; width: 2px; height: 20px;
+        }
+
+        .hud-glass {
+            background: rgba(10, 16, 30, 0.75);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-blur {
+            background: rgba(5, 8, 15, 0.88);
+            backdrop-filter: blur(12px);
+        }
+
+        .gold-gradient-btn {
+            background: linear-gradient(135deg, #f5c518 0%, #a87900 100%);
+            color: #05080f;
+            transition: all 0.25s ease-in-out;
+        }
+
+        .gold-gradient-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(245, 197, 24, 0.6);
+        }
+
+        /* Hit Flash Visual */
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(239, 68, 68, 0.25);
+            pointer-events: none;
+            display: none;
+            z-index: 15;
+        }
+
+        /* Dynamic Attack Arc Blur FX */
+        #smash-fx {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, rgba(245, 197, 24, 0.4) 0%, rgba(245, 197, 24, 0) 70%);
+            pointer-events: none;
+            display: none;
+            z-index: 18;
+            filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="relative overflow-hidden select-none">
+
+    <div id="game-container" class="relative w-full h-full">
+        <canvas id="game-canvas"></canvas>
+        <div id="crosshair"></div>
+        <div id="damage-flash"></div>
+        <div id="smash-fx"></div>
+
+        <!-- HUD Layer -->
+        <div id="hud-overlay" class="absolute top-4 left-4 z-20 flex flex-col gap-3 pointer-events-none">
+            <!-- Health & Shield Card -->
+            <div class="hud-glass rounded-xl p-3.5 w-64">
+                <div class="flex justify-between items-center text-xs font-bold text-amber-400 tracking-wider mb-1">
+                    <span>PRANA HEALTH</span>
+                    <span id="hp-value-text">100 / 100</span>
+                </div>
+                <div class="w-full h-3 bg-gray-950 rounded-full overflow-hidden border border-amber-500/30">
+                    <div id="hp-bar" class="h-full bg-gradient-to-r from-red-600 via-amber-500 to-emerald-400 w-full transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <!-- Objective Card -->
+            <div class="hud-glass rounded-xl p-3.5 w-72">
+                <div class="text-xs font-bold text-amber-400 tracking-wider uppercase">Current Chapter Quest</div>
+                <div id="chapter-title" class="text-sm font-semibold text-white mt-1">Chapter 1: The Asura Gates</div>
+                <div id="objective-desc" class="text-xs text-amber-200/80 mt-0.5">Deactivate 3 Astral Obelisks & Defeat Guardians</div>
+                <div class="mt-2 text-xs font-mono text-emerald-400" id="progress-status">Relics: 0/3 | Guardians: 4 Left</div>
+            </div>
+
+            <!-- Active Weapon & Attack Mode -->
+            <div class="hud-glass rounded-xl p-3.5 w-64">
+                <div class="text-xs font-bold text-amber-400 tracking-wider">ACTIVE WEAPON</div>
+                <div id="weapon-name" class="text-sm font-bold text-cyan-300 mt-1">1: Mahavajra Astra Sword</div>
+                <div id="attack-prompt" class="text-xs text-gray-300 mt-0.5">Left Click / Tap: Downward Heavy Smash</div>
+            </div>
+        </div>
+
+        <div class="absolute top-4 right-4 z-30 flex flex-col items-end gap-2.5">
+            <button id="ai-agent-btn" class="gold-gradient-btn px-4 py-2.5 rounded-full text-xs font-black tracking-wider flex items-center gap-2 shadow-lg">
+                <span class="animate-pulse">🤖</span> IAH STRATEGY AGENT
+            </button>
+            <button id="commercial-store-btn" class="bg-gradient-to-r from-amber-600 to-yellow-500 text-slate-950 px-4 py-2 rounded-full text-xs font-extrabold tracking-wider shadow-md hover:brightness-110">
+                🪙 ASTRA STORE ($ / £ / CHF)
+            </button>
+            <button id="audio-toggle-btn" class="hud-glass text-amber-300 px-3 py-1.5 rounded-full text-xs font-medium border border-amber-400/40 hover:bg-amber-400/20">
+                🔊 BGM: ON
+            </button>
+        </div>
+
+        <!-- In-Game Interactive Context Banner -->
+        <div id="interaction-banner" class="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 hud-glass px-6 py-2.5 rounded-full text-amber-300 font-bold text-sm tracking-wide hidden pointer-events-none border border-amber-400/60 shadow-xl animate-bounce">
+            [E] / Tap: Interact with Sacred Ancient Relic
+        </div>
+
+        <div id="mobile-touch-hud" class="absolute bottom-6 left-0 w-full px-6 z-30 flex justify-between items-center pointer-events-none md:hidden">
+            <div class="flex gap-2 pointer-events-auto">
+                <button id="touch-jump" class="w-14 h-14 rounded-full bg-amber-500/30 border border-amber-400 text-white font-bold text-xs flex items-center justify-center active:bg-amber-500/60">JUMP</button>
+                <button id="touch-interact" class="w-14 h-14 rounded-full bg-cyan-500/30 border border-cyan-400 text-white font-bold text-xs flex items-center justify-center active:bg-cyan-500/60">INTERACT</button>
+            </div>
+            <div class="flex gap-2 pointer-events-auto">
+                <button id="touch-swap" class="w-14 h-14 rounded-full bg-purple-500/30 border border-purple-400 text-white font-bold text-xs flex items-center justify-center active:bg-purple-500/60">WEAPON</button>
+                <button id="touch-smash" class="w-16 h-16 rounded-full bg-red-600/50 border-2 border-amber-400 text-white font-black text-xs flex items-center justify-center shadow-lg active:bg-red-600/80">SMASH!</button>
+            </div>
+        </div>
+
+        <div id="ai-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur hidden">
+            <div class="hud-glass max-w-lg w-full rounded-2xl p-6 border-2 border-amber-400/60 shadow-2xl relative">
+                <button onclick="closeModal('ai-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">&times;</button>
+                <div class="flex items-center gap-3 border-b border-amber-500/30 pb-3 mb-4">
+                    <span class="text-3xl">🏛️</span>
+                    <div>
+                        <h2 class="text-lg font-bold text-amber-400">IAH Adaptive NLP Strategy Agent</h2>
+                        <p class="text-xs text-gray-300">Real-time Tactical Behavior & Gameplay Optimizer</p>
+                    </div>
+                </div>
+                <div id="ai-modal-content" class="text-sm text-gray-200 leading-relaxed mb-4">
+                    Analyzing tactical matrix... The Humanoid Sentinels perform random side-dashes when targeted. Time your **Mahavajra Sword Smash** right as they finish their dash arc to inflict massive crushing damage!
+                </div>
+                <div class="bg-amber-950/40 rounded-lg p-3 border border-amber-500/30 text-xs text-amber-300 mb-4 font-mono">
+                    <div>🎯 Attack Precision: <span id="ai-accuracy">100%</span></div>
+                    <div>⚡ Evasion Strategy: <span id="ai-evasion">Optimal Sidestepping</span></div>
+                    <div>🧠 Agent Training Cycles: <span id="ai-cycles">142 Silent Real-Time Iterations</span></div>
+                </div>
+                <button onclick="closeModal('ai-modal')" class="w-full gold-gradient-btn py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider">Return to Battlefield</button>
+            </div>
+        </div>
+
+        <div id="store-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur hidden">
+            <div class="hud-glass max-w-md w-full rounded-2xl p-6 border-2 border-amber-400/60 shadow-2xl relative">
+                <button onclick="closeModal('store-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">&times;</button>
+                <div class="border-b border-amber-500/30 pb-3 mb-4">
+                    <h2 class="text-lg font-bold text-amber-400">Astra Divine Commercial Arsenal</h2>
+                    <p class="text-xs text-gray-300">Upgrade permanent capabilities across currencies</p>
+                </div>
+                <div class="space-y-3 mb-5">
+                    <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-amber-500/20">
+                        <div>
+                            <div class="text-sm font-bold text-amber-300">⚡ Vajra Energy Core</div>
+                            <div class="text-xs text-gray-400">+50 Max HP & Permanent Regeneration</div>
+                        </div>
+                        <button onclick="purchaseUpgrade('Vajra Core', '$2.99')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition">$2.99 USD</button>
+                    </div>
+                    <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-amber-500/20">
+                        <div>
+                            <div class="text-sm font-bold text-amber-300">⚔️️ Agni Astra Smash Power</div>
+                            <div class="text-xs text-gray-400">Double Weapon Smash Range & Radius</div>
+                        </div>
+                        <button onclick="purchaseUpgrade('Agni Smash', '£3.50')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition">£3.50 GBP</button>
+                    </div>
+                    <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-amber-500/20">
+                        <div>
+                            <div class="text-sm font-bold text-amber-300">🛡️ Divya Armor & Speed</div>
+                            <div class="text-xs text-gray-400">+40% Jump Height & Dash Velocity</div>
+                        </div>
+                        <button onclick="purchaseUpgrade('Divya Armor', 'CHF 4.00')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition">CHF 4.00</button>
+                    </div>
+                </div>
+                <button onclick="closeModal('store-modal')" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider">Close Store</button>
+            </div>
+        </div>
+
+        <div id="start-overlay" class="fixed inset-0 z-40 flex flex-col items-center justify-center p-6 text-center modal-blur">
+            <div class="max-w-2xl w-full hud-glass rounded-3xl p-8 border-2 border-amber-400/80 shadow-2xl">
+                <div class="text-amber-400 text-xs font-black tracking-widest uppercase mb-2">ANCIENT INDIAN VEDIC SCI-FI ADVENTURE</div>
+                <h1 class="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-600 tracking-tight mb-4">
+                    THE IAH: ANANTA LOKAKSHETRA
+                </h1>
+                <p class="text-sm md:text-base text-gray-300 leading-relaxed mb-6">
+                    Step into an open 3D realm rendered over procedural satellite maps. Explore ancient Vimana Mahastupa structures, collect sacred relics with Sanskrit inscriptions, and smash dynamic humanoid guardians controlled by the Astral Master.
+                </p>
+
+                <div class="grid grid-cols-2 gap-3 text-left bg-black/40 p-4 rounded-xl border border-amber-500/30 text-xs text-amber-200/90 mb-6 font-mono">
+                    <div>⌨️ WASD: Move Around</div>
+                    <div>🖱️️ Mouse: Look & Aim Camera</div>
+                    <div>⚔️ Left Click / Tap: Weapon Smash</div>
+                    <div>🚀 Spacebar: Jump Physics</div>
+                    <div>🔢 1 / 2 / 3: Switch Astra Weapons</div>
+                    <div>🔍 E: Interact / Collect Relics</div>
+                </div>
+
+                <button onclick="launchGameEngine()" class="w-full gold-gradient-btn py-4 rounded-2xl text-lg font-black tracking-wider shadow-2xl uppercase">
+                    ENTER ANANTA LOKAKSHETRA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, clock;
+
+        // Player physics & weapon state
+        const player = {
+            height: 1.8,
+            speed: 0.16,
+            jumpVelocity: 0,
+            isJumping: false,
+            health: 100,
+            maxHealth: 100,
+            activeWeapon: 1, // 1: Sword, 2: Blaster, 3: Gada Mace
+            isSmashing: false,
+            smashCooldown: false,
+            score: 0,
+            relicsCollected: 0,
+            totalRelicsNeeded: 3,
+            chapter: 1,
+            position: new THREE.Vector3(0, 1.8, 0)
+        };
+
+        // Input & camera look controls
+        const keys = {};
+        const mouseLook = { yaw: 0, pitch: 0 };
+        let isPointerLocked = false;
+
+        // Entities & Environment
+        let enemies = [];
+        let relics = [];
+        let pillars = [];
+        let weaponGroup, swordMesh, blasterMesh, gadaMesh;
+        let ambientParticles;
+
+        // AI Agent Training tracking
+        const aiMetrics = {
+            swingsFired: 0,
+            hitsLanded: 0,
+            damageTaken: 0,
+            evasionCount: 0,
+            trainingCycles: 142
+        };
+
+        // Web Audio Synthesizer
+        let audioCtx = null;
+        let bgmOsc1 = null, bgmOsc2 = null, bgmGain = null;
+        let soundEnabled = true;
+
+        function initAudioEngine() {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Ambient Drone BGM (Indian Raga-inspired synth tone)
+                bgmOsc1 = audioCtx.createOscillator();
+                bgmOsc2 = audioCtx.createOscillator();
+                bgmGain = audioCtx.createGain();
+
+                bgmOsc1.type = 'sawtooth';
+                bgmOsc2.type = 'sine';
+
+                // Drone pitch (D2 / D3 harmonic interval)
+                bgmOsc1.frequency.setValueAtTime(73.42, audioCtx.currentTime); // D2
+                bgmOsc2.frequency.setValueAtTime(146.83, audioCtx.currentTime); // D3
+
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(280, audioCtx.currentTime);
+
+                bgmOsc1.connect(filter);
+                bgmOsc2.connect(filter);
+                filter.connect(bgmGain);
+                bgmGain.connect(audioCtx.destination);
+
+                bgmGain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                bgmOsc1.start();
+                bgmOsc2.start();
+            } catch (e) {
+                console.warn("Audio Context initialization deferred", e);
+            }
+        }
+
+        function playSoundSFX(type) {
+            if (!audioCtx || !soundEnabled) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'smash') {
+                // Heavy Sword Smash Impact SFX
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.35);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'blast') {
+                // Agni Plasma Cannon Blast SFX
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(750, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'hit') {
+                // Enemy Hurt SFX
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'relic') {
+                // Collect Relic SFX
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554.37, now + 0.1);
+                osc.frequency.setValueAtTime(659.25, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'jump') {
+                // Jump SFX
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(320, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+        }
+
+        function createSatelliteTerrainTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            // Ground base satellite terrain color
+            ctx.fillStyle = '#1c2419';
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Satellite agricultural & courtyard patch grid
+            for (let i = 0; i < 500; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#152012' : '#2a3824';
+                ctx.fillRect(Math.random()*1024, Math.random()*1024, Math.random()*70+15, Math.random()*70+15);
+            }
+
+            // Real-world satellite pathway grid lines
+            ctx.strokeStyle = '#5a5245';
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.moveTo(0, 512); ctx.lineTo(1024, 512);
+            ctx.moveTo(512, 0); ctx.lineTo(512, 1024);
+            ctx.stroke();
+
+            // Circular sacred yantra motif in courtyard center
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(512, 512, 220, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 4);
+            return texture;
+        }
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x060a14);
+            scene.fog = new THREE.FogExp2(0x060a14, 0.012);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, player.height, 0);
+
+            clock = new THREE.Clock();
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Ambient & Sun Lights
+            const ambient = new THREE.AmbientLight(0xffeedd, 0.45);
+            scene.add(ambient);
+
+            const sunLight = new THREE.DirectionalLight(0xffdfa9, 1.3);
+            sunLight.position.set(60, 100, 40);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            scene.add(sunLight);
+
+            // Satellite Ground Plane
+            const groundTex = createSatelliteTerrainTexture();
+            const groundGeo = new THREE.PlaneGeometry(300, 300);
+            const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.85 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Build Ancient Vimana Architectural Structures
+            buildVimanaArchitecture();
+
+            // Setup Weapons
+            setupWeapons();
+
+            // Spawn Relics
+            spawnRelics();
+
+            // Spawn Humanoid Guardians
+            spawnHumanoidEnemies(4);
+
+            // Create Floating Particles
+            createAtmosphericParticles();
+
+            window.addEventListener('resize', onWindowResize);
+            setupInputListeners();
+        }
+
+        function buildVimanaArchitecture() {
+            const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3d3935, roughness: 0.65 });
+            const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.85, roughness: 0.2 });
+            const crystalMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x0088cc, emissiveIntensity: 0.6 });
+
+            // Main Vimana Mahastupa Central Pyramid Structure
+            const templeBase = new THREE.Mesh(new THREE.BoxGeometry(26, 12, 26), stoneMat);
+            templeBase.position.set(0, 6, -50);
+            templeBase.castShadow = true;
+            templeBase.receiveShadow = true;
+            scene.add(templeBase);
+
+            // Multi-tiered Spire
+            for (let i = 0; i < 5; i++) {
+                const tier = new THREE.Mesh(new THREE.BoxGeometry(22 - i * 4, 3.5, 22 - i * 4), stoneMat);
+                tier.position.set(0, 13.75 + i * 3.5, -50);
+                tier.castShadow = true;
+                scene.add(tier);
+            }
+
+            // Glowing Golden Apex Kalasa
+            const apex = new THREE.Mesh(new THREE.ConeGeometry(2, 5, 8), goldMat);
+            apex.position.set(0, 33.5, -50);
+            scene.add(apex);
+
+            // Sanctuary Entrance Pillars
+            for (let x = -35; x <= 35; x += 17.5) {
+                for (let z = -75; z <= -25; z += 25) {
+                    if (Math.abs(x) < 5 && z === -50) continue; // Keep entrance clear
+
+                    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 14, 16), stoneMat);
+                    pillar.position.set(x, 7, z);
+                    pillar.castShadow = true;
+                    scene.add(pillar);
+
+                    const cap = new THREE.Mesh(new THREE.OctahedronGeometry(1.2), crystalMat);
+                    cap.position.set(x, 14.5, z);
+                    scene.add(cap);
+
+                    pillars.push(cap);
+                }
+            }
+        }
+
+        function setupWeapons() {
+            weaponGroup = new THREE.Group();
+
+            // 1. Astral Mahavajra Sword
+            swordMesh = new THREE.Group();
+            const blade = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 1.4, 0.2),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.95, roughness: 0.1, emissive: 0xd4af37, emissiveIntensity: 0.4 })
+            );
+            blade.position.y = 0.7;
+            swordMesh.add(blade);
+
+            const hilt = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.06, 0.06, 0.35),
+                new THREE.MeshStandardMaterial({ color: 0x8b5a2b })
+            );
+            hilt.position.y = 0;
+            swordMesh.add(hilt);
+
+            const guard = new THREE.Mesh(
+                new THREE.BoxGeometry(0.45, 0.08, 0.12),
+                new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8 })
+            );
+            guard.position.y = 0.18;
+            swordMesh.add(guard);
+
+            swordMesh.position.set(0.35, -0.35, -0.65);
+            swordMesh.rotation.set(0.2, -0.2, -0.1);
+            weaponGroup.add(swordMesh);
+
+            // 2. Agni Plasma Blaster
+            blasterMesh = new THREE.Group();
+            const barrel = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.12, 0.14, 0.9, 16),
+                new THREE.MeshStandardMaterial({ color: 0x22252a, metalness: 0.9 })
+            );
+            barrel.rotation.x = Math.PI / 2;
+            blasterMesh.add(barrel);
+
+            const coreRing = new THREE.Mesh(
+                new THREE.TorusGeometry(0.16, 0.04, 12, 24),
+                new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+            );
+            coreRing.position.z = -0.2;
+            blasterMesh.add(coreRing);
+
+            blasterMesh.position.set(0.35, -0.35, -0.65);
+            blasterMesh.visible = false;
+            weaponGroup.add(blasterMesh);
+
+            // 3. Sudarshana Gada Mace
+            gadaMesh = new THREE.Group();
+            const maceShaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.06, 0.06, 1.2),
+                new THREE.MeshStandardMaterial({ color: 0x4a3b2c })
+            );
+            maceShaft.position.y = 0.6;
+            gadaMesh.add(maceShaft);
+
+            const maceHead = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3, 12, 12),
+                new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 })
+            );
+            maceHead.position.y = 1.1;
+            gadaMesh.add(maceHead);
+
+            gadaMesh.position.set(0.35, -0.35, -0.65);
+            gadaMesh.visible = false;
+            weaponGroup.add(gadaMesh);
+
+            camera.add(weaponGroup);
+            scene.add(camera);
+        }
+
+        function spawnRelics() {
+            relics.forEach(r => scene.remove(r));
+            relics = [];
+
+            const relicPositions = [
+                { x: 0, z: -48, name: "Ananta Chakra Core" },
+                { x: -30, z: -25, name: "Tejas Sanskrit Obelisk" },
+                { x: 30, z: -65, name: "Moksha Divine Crystal" }
+            ];
+
+            const geo = new THREE.OctahedronGeometry(0.9, 0);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xd4af37, emissive: 0xffaa00, emissiveIntensity: 0.8, metalness: 0.9 });
+
+            relicPositions.forEach((pos, i) => {
+                const relic = new THREE.Mesh(geo, mat.clone());
+                relic.position.set(pos.x, 1.8, pos.z);
+                relic.userData = { id: i, name: pos.name, collected: false };
+
+                const light = new THREE.PointLight(0xffaa00, 2, 10);
+                relic.add(light);
+
+                scene.add(relic);
+                relics.push(relic);
+            });
+        }
+
+        function createHumanoidGuardian(type) {
+            const group = new THREE.Group();
+
+            let armorColor = 0xa93226; // Chapter 1: Asura Sentinel Red
+            if (type === 2) armorColor = 0x2980b9; // Chapter 2: Cyber Sage Blue
+            if (type === 3) armorColor = 0xd4af37; // Chapter 3: Astral Master Gold
+
+            const mat = new THREE.MeshStandardMaterial({ color: armorColor, roughness: 0.4, metalness: 0.6 });
+            const goldAcc = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9 });
+            const visorMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+
+            // Torso & Chest Armor
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.5), mat);
+            torso.position.y = 1.5;
+            torso.castShadow = true;
+            group.add(torso);
+
+            // Head & Crown Visor
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), goldAcc);
+            head.position.y = 2.35;
+            group.add(head);
+
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.25), visorMat);
+            visor.position.set(0, 2.38, 0.2);
+            group.add(visor);
+
+            // Pauldrons / Shoulder Armor
+            const leftPad = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.45), goldAcc);
+            leftPad.position.set(-0.65, 2.0, 0);
+            group.add(leftPad);
+
+            const rightPad = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.45), goldAcc);
+            rightPad.position.set(0.65, 2.0, 0);
+            group.add(rightPad);
+
+            // Articulated Arms
+            const armGeo = new THREE.BoxGeometry(0.28, 1.0, 0.28);
+            const leftArm = new THREE.Mesh(armGeo, mat);
+            leftArm.position.set(-0.62, 1.3, 0);
+            group.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, mat);
+            rightArm.position.set(0.62, 1.3, 0);
+            group.add(rightArm);
+
+            // Weapon attached to hand
+            const weapon = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), goldAcc);
+            weapon.position.set(0.62, 0.7, 0.4);
+            weapon.rotation.x = Math.PI / 4;
+            group.add(weapon);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.32, 1.1, 0.32);
+            const leftLeg = new THREE.Mesh(legGeo, mat);
+            leftLeg.position.set(-0.28, 0.55, 0);
+            group.add(leftLeg);
+
+            const rightLeg = new THREE.Mesh(legGeo, mat);
+            rightLeg.position.set(0.28, 0.55, 0);
+            group.add(rightLeg);
+
+            return group;
+        }
+
+        function spawnHumanoidEnemies(count) {
+            enemies.forEach(e => scene.remove(e));
+            enemies = [];
+
+            for (let i = 0; i < count; i++) {
+                const enemy = createHumanoidGuardian(player.chapter);
+                const angle = (i / count) * Math.PI * 2;
+                const radius = 22 + Math.random() * 18;
+
+                enemy.position.set(Math.cos(angle) * radius, 0, -50 + Math.sin(angle) * radius);
+                enemy.userData = {
+                    health: 80 + player.chapter * 20,
+                    maxHealth: 80 + player.chapter * 20,
+                    speed: 0.05 + player.chapter * 0.015,
+                    strafeDir: Math.random() > 0.5 ? 1 : -1,
+                    lastStrafeChange: 0,
+                    isStunned: false
+                };
+
+                scene.add(enemy);
+                enemies.push(enemy);
+            }
+        }
+
+        function createAtmosphericParticles() {
+            const particleGeo = new THREE.BufferGeometry();
+            const particleCount = 200;
+            const posArray = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                posArray[i] = (Math.random() - 0.5) * 150;
+                posArray[i + 1] = Math.random() * 25;
+                posArray[i + 2] = (Math.random() - 0.5) * 150;
+            }
+
+            particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particleMat = new THREE.PointsMaterial({ size: 0.25, color: 0xd4af37, transparent: true, opacity: 0.6 });
+            ambientParticles = new THREE.Points(particleGeo, particleMat);
+            scene.add(ambientParticles);
+        }
+
+        function setupInputListeners() {
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+
+                if (e.code === 'Digit1') switchActiveWeapon(1);
+                if (e.code === 'Digit2') switchActiveWeapon(2);
+                if (e.code === 'Digit3') switchActiveWeapon(3);
+                if (e.code === 'KeyE') performInteraction();
+                if (e.code === 'Space') executeJump();
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            // PointerLock API
+            document.addEventListener('click', (e) => {
+                if (!isPointerLocked && e.target.tagName === 'CANVAS') {
+                    renderer.domElement.requestPointerLock();
+                } else if (isPointerLocked) {
+                    executeWeaponSmash();
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = (document.pointerLockElement === renderer.domElement);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isPointerLocked) return;
+                const sensitivity = 0.0022;
+                mouseLook.yaw -= e.movementX * sensitivity;
+                mouseLook.pitch -= e.movementY * sensitivity;
+
+                mouseLook.pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, mouseLook.pitch));
+            });
+
+            // Mobile Touch Buttons
+            document.getElementById('touch-jump').addEventListener('touchstart', (e) => { e.preventDefault(); executeJump(); });
+            document.getElementById('touch-smash').addEventListener('touchstart', (e) => { e.preventDefault(); executeWeaponSmash(); });
+            document.getElementById('touch-interact').addEventListener('touchstart', (e) => { e.preventDefault(); performInteraction(); });
+            document.getElementById('touch-swap').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                switchActiveWeapon(player.activeWeapon % 3 + 1);
+            });
+
+            // Modal Button Listeners
+            document.getElementById('ai-agent-btn').addEventListener('click', () => {
+                document.getElementById('ai-modal').style.display = 'flex';
+                if (isPointerLocked) document.exitPointerLock();
+            });
+
+            document.getElementById('commercial-store-btn').addEventListener('click', () => {
+                document.getElementById('store-modal').style.display = 'flex';
+                if (isPointerLocked) document.exitPointerLock();
+            });
+
+            document.getElementById('audio-toggle-btn').addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                document.getElementById('audio-toggle-btn').innerText = soundEnabled ? "🔊 BGM: ON" : "🔇 BGM: OFF";
+                if (bgmGain) bgmGain.gain.value = soundEnabled ? 0.06 : 0;
+            });
+        }
+
+        function executeJump() {
+            if (!player.isJumping) {
+                player.jumpVelocity = 0.22;
+                player.isJumping = true;
+                playSoundSFX('jump');
+            }
+        }
+
+        function switchActiveWeapon(id) {
+            player.activeWeapon = id;
+            swordMesh.visible = (id === 1);
+            blasterMesh.visible = (id === 2);
+            gadaMesh.visible = (id === 3);
+
+            const weaponNames = {
+                1: "1: Mahavajra Astra Sword",
+                2: "2: Agni Plasma Blaster",
+                3: "3: Sudarshana Heavy Gada"
+            };
+
+            const prompts = {
+                1: "Left Click / Tap: Heavy Downward Smash Arc",
+                2: "Left Click / Tap: Precision Plasma Beam Blast",
+                3: "Left Click / Tap: Massive Area Ground Smash"
+            };
+
+            document.getElementById('weapon-name').innerText = weaponNames[id];
+            document.getElementById('attack-prompt').innerText = prompts[id];
+            playSoundSFX('smash');
+        }
+
+        function executeWeaponSmash() {
+            if (player.isSmashing) return;
+            player.isSmashing = true;
+            aiMetrics.swingsFired++;
+
+            const activeMesh = player.activeWeapon === 1 ? swordMesh : (player.activeWeapon === 2 ? blasterMesh : gadaMesh);
+            const originalRot = activeMesh.rotation.x;
+            const originalPos = activeMesh.position.z;
+
+            // Attack Smash FX Overlay
+            const smashFx = document.getElementById('smash-fx');
+            smashFx.style.display = 'block';
+            setTimeout(() => { smashFx.style.display = 'none'; }, 150);
+
+            if (player.activeWeapon === 1) {
+                // 1. Astral Sword Smash Downward Swing Animation
+                playSoundSFX('smash');
+                activeMesh.rotation.x += 1.2;
+                activeMesh.position.z -= 0.3;
+
+                setTimeout(() => {
+                    activeMesh.rotation.x = originalRot;
+                    activeMesh.position.z = originalPos;
+                    player.isSmashing = false;
+                }, 220);
+
+                // Forward Cone Collision Detection for Sword Smash
+                enemies.forEach(enemy => {
+                    const dist = camera.position.distanceTo(enemy.position);
+                    if (dist < 4.2) {
+                        applyDamageToEnemy(enemy, 45);
+                    }
+                });
+
+            } else if (player.activeWeapon === 2) {
+                // 2. Agni Plasma Cannon Fire
+                playSoundSFX('blast');
+                activeMesh.position.z += 0.15;
+
+                setTimeout(() => {
+                    activeMesh.position.z = originalPos;
+                    player.isSmashing = false;
+                }, 140);
+
+                // Raycast Laser Detection
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(enemies, true);
+
+                if (intersects.length > 0) {
+                    let hitObj = intersects[0].object;
+                    while (hitObj.parent && !hitObj.userData.health) {
+                        hitObj = hitObj.parent;
+                    }
+                    if (hitObj && hitObj.userData && hitObj.userData.health) {
+                        applyDamageToEnemy(hitObj, 30);
+                    }
+                }
+
+            } else {
+                // 3. Sudarshana Gada Mace Smash
+                playSoundSFX('smash');
+                activeMesh.rotation.x += 1.4;
+
+                setTimeout(() => {
+                    activeMesh.rotation.x = originalRot;
+                    player.isSmashing = false;
+                }, 280);
+
+                // Radial Area Ground Shockwave Smash Damage
+                enemies.forEach(enemy => {
+                    const dist = camera.position.distanceTo(enemy.position);
+                    if (dist < 5.5) {
+                        applyDamageToEnemy(enemy, 60);
+                        // Knockback physics
+                        const knockDir = new THREE.Vector3().subVectors(enemy.position, camera.position).normalize();
+                        enemy.position.addScaledVector(knockDir, 2.5);
+                    }
+                });
+            }
+        }
+
+        function applyDamageToEnemy(enemy, damage) {
+            playSoundSFX('hit');
+            aiMetrics.hitsLanded++;
+            enemy.userData.health -= damage;
+
+            // Flash enemy model red
+            enemy.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    child.material.emissive = new THREE.Color(0xff0000);
+                    child.material.emissiveIntensity = 0.8;
+                }
+            });
+
+            setTimeout(() => {
+                enemy.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        child.material.emissive = new THREE.Color(0x000000);
+                        child.material.emissiveIntensity = 0;
+                    }
+                });
+            }, 120);
+
+            if (enemy.userData.health <= 0) {
+                scene.remove(enemy);
+                enemies = enemies.filter(e => e !== enemy);
+                player.score += 150;
+                updateHUD();
+                checkChapterProgress();
+            }
+        }
+
+        function performInteraction() {
+            relics.forEach(relic => {
+                if (!relic.userData.collected && camera.position.distanceTo(relic.position) < 4.0) {
+                    relic.userData.collected = true;
+                    scene.remove(relic);
+                    player.relicsCollected++;
+                    player.score += 300;
+                    playSoundSFX('relic');
+                    updateHUD();
+                    checkChapterProgress();
+                }
+            });
+        }
+
+        function checkChapterProgress() {
+            if (player.relicsCollected >= player.totalRelicsNeeded && enemies.length === 0) {
+                player.chapter++;
+                player.relicsCollected = 0;
+
+                if (player.chapter === 2) {
+                    document.getElementById('chapter-title').innerText = "Chapter 2: Cyber-Vedic Androids";
+                    document.getElementById('objective-desc').innerText = "Purify the Sanctuary Courtyard of Cyber Guardians";
+                    spawnHumanoidEnemies(6);
+                    spawnRelics();
+                } else if (player.chapter === 3) {
+                    document.getElementById('chapter-title').innerText = "Chapter 3: Astral Master Mahaguru";
+                    document.getElementById('objective-desc').innerText = "Confront the Supreme Astral Master Avatar";
+                    spawnBossGuardian();
+                } else {
+                    // Infinite Ascension Chapter Loop Engine
+                    document.getElementById('chapter-title').innerText = `Chapter ${player.chapter}: Infinite Lokakshetra Loop`;
+                    document.getElementById('objective-desc').innerText = "Survive Scaling Waves of Adaptive Humanoid Sentinels";
+                    spawnHumanoidEnemies(5 + player.chapter);
+                    spawnRelics();
+                }
+                updateHUD();
+            }
+        }
+
+        function spawnBossGuardian() {
+            const boss = createHumanoidGuardian(3);
+            boss.scale.set(2.4, 2.4, 2.4);
+            boss.position.set(0, 0, -55);
+            boss.userData = {
+                health: 450,
+                maxHealth: 450,
+                speed: 0.07,
+                strafeDir: 1,
+                lastStrafeChange: 0
+            };
+            scene.add(boss);
+            enemies.push(boss);
+        }
+
+        function updateHUD() {
+            document.getElementById('hp-bar').style.width = `${Math.max(0, (player.health / player.maxHealth) * 100)}%`;
+            document.getElementById('hp-value-text').innerText = `${Math.ceil(player.health)} / ${player.maxHealth}`;
+            document.getElementById('progress-status').innerText = `Relics: ${player.relicsCollected}/${player.totalRelicsNeeded} | Guardians: ${enemies.length} Left`;
+
+            // Update AI Modal statistics
+            const accuracy = aiMetrics.swingsFired > 0 ? Math.round((aiMetrics.hitsLanded / aiMetrics.swingsFired) * 100) : 100;
+            document.getElementById('ai-accuracy').innerText = `${accuracy}%`;
+            document.getElementById('ai-cycles').innerText = `${aiMetrics.trainingCycles + player.score} Silent Cycles`;
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function purchaseUpgrade(itemName, price) {
+            if (itemName.includes('Vajra Core')) {
+                player.maxHealth += 50;
+                player.health = player.maxHealth;
+            } else if (itemName.includes('Agni Smash')) {
+                player.speed += 0.04;
+            }
+            updateHUD();
+            closeModal('store-modal');
+        }
+
+        function animateFrame() {
+            const delta = clock.getDelta();
+
+            // 1. Camera Look Rotation
+            const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+            euler.x = mouseLook.pitch;
+            euler.y = mouseLook.yaw;
+            camera.quaternion.setFromEuler(euler);
+
+            // 2. Player Movement Physics
+            const moveVec = new THREE.Vector3();
+            if (keys['KeyW']) moveVec.z -= 1;
+            if (keys['KeyS']) moveVec.z += 1;
+            if (keys['KeyA']) moveVec.x -= 1;
+            if (keys['KeyD']) moveVec.x += 1;
+
+            moveVec.normalize();
+            moveVec.applyQuaternion(camera.quaternion);
+            moveVec.y = 0;
+
+            camera.position.addScaledVector(moveVec, player.speed);
+
+            // Gravity & Jump Physics
+            if (player.isJumping) {
+                camera.position.y += player.jumpVelocity;
+                player.jumpVelocity -= 0.011; // Gravity acceleration
+
+                if (camera.position.y <= player.height) {
+                    camera.position.y = player.height;
+                    player.isJumping = false;
+                    player.jumpVelocity = 0;
+                }
+            }
+
+            // 3. Relic Rotation & Interaction Proximity
+            let nearRelic = false;
+            relics.forEach(relic => {
+                if (!relic.userData.collected) {
+                    relic.rotation.y += delta * 1.8;
+                    if (camera.position.distanceTo(relic.position) < 4.0) {
+                        nearRelic = true;
+                    }
+                }
+            });
+            document.getElementById('interaction-banner').style.display = nearRelic ? 'block' : 'none';
+
+            // 4. Humanoid Enemy AI Engine (Dynamic Tactical Sidestepping & Random Evasive Dashes)
+            enemies.forEach(enemy => {
+                const distToPlayer = enemy.position.distanceTo(camera.position);
+
+                // Animate leg walking cycles
+                const walkCycle = Date.now() * 0.009;
+                if (enemy.children[6]) enemy.children[6].rotation.x = Math.sin(walkCycle) * 0.6;
+                if (enemy.children[7]) enemy.children[7].rotation.x = -Math.sin(walkCycle) * 0.6;
+
+                if (distToPlayer < 22) {
+                    // Face Player
+                    enemy.lookAt(camera.position.x, enemy.position.y, camera.position.z);
+
+                    // Forward Chase Vector
+                    const chaseDir = new THREE.Vector3().subVectors(camera.position, enemy.position).normalize();
+                    chaseDir.y = 0;
+
+                    // Random Tactical Sidestepping Logic (Random Evasive Maneuvers)
+                    if (Date.now() - enemy.userData.lastStrafeChange > 2000) {
+                        enemy.userData.strafeDir = Math.random() > 0.5 ? 1 : -1;
+                        enemy.userData.lastStrafeChange = Date.now();
+                        aiMetrics.evasionCount++;
+                    }
+
+                    // Side-strafe vector perpendicular to chase vector
+                    const strafeVec = new THREE.Vector3(-chaseDir.z, 0, chaseDir.x).multiplyScalar(enemy.userData.strafeDir * 0.4);
+                    const combinedVel = chaseDir.add(strafeVec).normalize();
+
+                    enemy.position.addScaledVector(combinedVel, enemy.userData.speed);
+
+                    // Enemy Melee Attack Check
+                    if (distToPlayer < 2.0) {
+                        player.health -= 0.35;
+                        aiMetrics.damageTaken += 0.35;
+
+                        // Visual Damage Flash
+                        const flash = document.getElementById('damage-flash');
+                        flash.style.display = 'block';
+                        setTimeout(() => { flash.style.display = 'none'; }, 60);
+
+                        playSoundSFX('hit');
+                        updateHUD();
+
+                        if (player.health <= 0) {
+                            player.health = player.maxHealth;
+                            camera.position.set(0, player.height, 0);
+                            updateHUD();
+                        }
+                    }
+                }
+            });
+
+            // Rotate Pillars & Particle Floating
+            pillars.forEach(p => p.rotation.y += delta * 0.5);
+            if (ambientParticles) ambientParticles.rotation.y += delta * 0.05;
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animateFrame);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function launchGameEngine() {
+            initAudioEngine();
+            document.getElementById('start-overlay').style.display = 'none';
+            renderer.domElement.requestPointerLock();
+            requestAnimationFrame(animateFrame);
+        }
+
+        window.onload = initScene;
+    </script>
+</body>
+</html>
